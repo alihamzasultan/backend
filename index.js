@@ -59,7 +59,7 @@ const lipSyncMessage = async (messageIndex) => {
     const time = new Date().getTime();
     console.log(`Starting conversion for message ${messageIndex}`);
 
-    // Upload the audio file to Cloudinary
+    // Upload the audio file to Cloudinar
     const audioFilePath = path.join(__dirname, "audios", `message_${messageIndex}.mp3`);
     const cloudinaryResponse = await cloudinary.uploader.upload(audioFilePath, {
       resource_type: 'video', // Use 'video' for audio files

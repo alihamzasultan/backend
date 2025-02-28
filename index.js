@@ -21,10 +21,9 @@ app.use(cors({
 
 app.use(express.json());
 
-app.listen(3000, () => {
-  console.log("Server running on port 3000");
-});
+const cors = require("cors");
 
+app.use(cors({ origin: "https://frontend-yslq.vercel.app" }));
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config();

@@ -8,18 +8,9 @@ import OpenAI from "openai";
 import path from "path";
 import { fileURLToPath } from "url";
 
-dotenv.config();
-
-const app = express();
-app.use(cors({
-  origin: "https://frontend-yslq.vercel.app",
-  methods: "GET,POST,PUT,DELETE",
-  allowedHeaders: "Content-Type,Authorization"
-}));
-app.use(express.json());
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config();
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "-",
@@ -31,18 +22,24 @@ const voice = new ElevenLabsClient({
 
 const voiceID = "EXAVITQu4vr4xnSDxMaL";
 
+const app = express();
+app.use(express.json());
+app.use(cors());
 app.use("/audios", express.static(path.join(__dirname, "audios")));
+const port = 3000;
 
-
-let previousFiles = []; // To track files generated in the previous response
-let conversationHistory = []; // To store conversation history
-let isSpeaking = false; // To track if the chatbot is currently speaking
-let currentProcess = null; // To track the current speech generation process
+let previousFiles = [];
+let conversationHistory = [];
+let isSpeaking = false;
+let currentProcess = null;
 
 const execCommand = (command) => {
   return new Promise((resolve, reject) => {
     const process = exec(command, (error, stdout, stderr) => {
-      if (error) reject(error);
+      if (error) {
+        console.error(`Command failed: ${command}`, error);
+        return reject(error);
+      }
       resolve(stdout);
     });
     currentProcess = process;
@@ -50,16 +47,22 @@ const execCommand = (command) => {
 };
 
 const lipSyncMessage = async (messageIndex) => {
-  const time = new Date().getTime();
-  console.log(`Starting conversion for message ${messageIndex}`);
-  await execCommand(
-    `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
-  );
-  console.log(`Conversion done in ${new Date().getTime() - time}ms`);
-  await execCommand(
-    `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
-  );
-  console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
+  try {
+    const time = new Date().getTime();
+    console.log(`Starting conversion for message ${messageIndex}`);
+    
+    await execCommand(
+      `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
+    );
+    console.log(`Conversion done in ${new Date().getTime() - time}ms`);
+
+    await execCommand(
+      `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
+    );
+    console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
+  } catch (error) {
+    console.error("Error in lip-sync process:", error);
+  }
 };
 
 const deletePreviousFiles = async () => {
@@ -71,26 +74,44 @@ const deletePreviousFiles = async () => {
       console.error(`Error deleting file ${file}:`, error);
     }
   }
-  previousFiles = []; // Reset the list of files
+  previousFiles = [];
 };
 
 const stopSpeaking = () => {
   if (currentProcess) {
-    currentProcess.kill(); // Kill the current speech generation process
+    currentProcess.kill();
     currentProcess = null;
   }
   isSpeaking = false;
 };
 
+const readJsonTranscript = async (file) => {
+  try {
+    const data = await fs.readFile(file, "utf8");
+    return JSON.parse(data);
+  } catch (error) {
+    console.error(`Error reading JSON file: ${file}`, error);
+    return null;
+  }
+};
+
+const audioFileToBase64 = async (file) => {
+  try {
+    const data = await fs.readFile(file);
+    return data.toString("base64");
+  } catch (error) {
+    console.error(`Error converting audio to base64: ${file}`, error);
+    return null;
+  }
+};
+
 app.post("/chat", async (req, res) => {
   const userMessage = req.body.message;
 
-  // If the chatbot is currently speaking, stop it
   if (isSpeaking) {
     stopSpeaking();
   }
 
-  // Delete previous audio and JSON files
   await deletePreviousFiles();
 
   if (!userMessage) {
@@ -137,98 +158,81 @@ app.post("/chat", async (req, res) => {
     return;
   }
 
-  // Add the user's message to the conversation history
   conversationHistory.push({ role: "user", content: userMessage });
 
-  // Prepare the messages for the OpenAI API
   const messages = [
     {
       role: "system",
       content:
         "You are a friendly assistant for kids aged 8-10. Just play with kids and respond in a simple, fun, and engaging way. Always reply with plain text, no JSON formatting.",
     },
-    ...conversationHistory.slice(-10), // Include the last 10 messages from the history
+    ...conversationHistory.slice(-10),
   ];
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    max_tokens: 500,
-    temperature: 0.6,
-    messages,
-  });
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      max_tokens: 500,
+      temperature: 0.6,
+      messages,
+    });
 
-  console.log("OpenAI Response:", completion.choices[0].message.content);
+    const responseText = completion.choices[0]?.message?.content || "I'm here to chat!";
+    console.log("OpenAI Response:", responseText);
 
-  // Format the GPT response into the required JSON structure
-  const animations = ["Talking_0", "Talking_1", "Talking_2"]; // Add more if needed
+    const animations = ["Talking_0", "Talking_1", "Talking_2"];
 
-  const assistantMessages = [
-    {
-      text: completion.choices[0].message.content,
-      facialExpression: "smile",
-      animation: animations[Math.floor(Math.random() * animations.length)],
-    },
-  ];
+    const assistantMessages = [
+      {
+        text: responseText,
+        facialExpression: "smile",
+        animation: animations[Math.floor(Math.random() * animations.length)],
+      },
+    ];
 
-  // Add the assistant's message to the conversation history
-  conversationHistory.push({ role: "assistant", content: assistantMessages[0].text });
+    conversationHistory.push({ role: "assistant", content: responseText });
 
-  isSpeaking = true; // Set the flag to indicate that the chatbot is speaking
+    isSpeaking = true;
 
-  for (let i = 0; i < assistantMessages.length; i++) {
-    const timestamp = Date.now(); // Unique timestamp for each response
-    const message = assistantMessages[i];
+    for (let i = 0; i < assistantMessages.length; i++) {
+      const timestamp = Date.now();
+      const message = assistantMessages[i];
 
-    // Ensure the text is not undefined
-    if (!message.text) {
-      console.error("Text is undefined for message:", message);
-      continue;
+      if (!message.text) {
+        console.error("Text is undefined for message:", message);
+        continue;
+      }
+
+      const audioFilePath = path.join(__dirname, "audios", `message_${timestamp}.mp3`);
+      const jsonFilePath = path.join(__dirname, "audios", `message_${timestamp}.json`);
+
+      try {
+        const voicebuffer = await voice.textToSpeech.convert(voiceID, {
+          text: message.text,
+          outputFormat: "mp3_22050_32",
+        });
+        await fs.writeFile(audioFilePath, voicebuffer);
+      } catch (error) {
+        console.error("Error converting text to speech:", error);
+        continue;
+      }
+
+      await lipSyncMessage(timestamp);
+
+      message.audio = `/audios/message_${timestamp}.mp3`;
+      message.lipsync = await readJsonTranscript(jsonFilePath);
+
+      previousFiles.push(audioFilePath, jsonFilePath);
     }
 
-    // Generate unique filenames
-    const audioFilePath = path.join(__dirname, "audios", `message_${timestamp}.mp3`);
-    const jsonFilePath = path.join(__dirname, "audios", `message_${timestamp}.json`);
+    isSpeaking = false;
 
-    // Generate text-to-speech audio
-    const textInput = message.text;
-    console.log("Text to be converted to speech:", textInput);
-
-    try {
-      const voicebuffer = await voice.textToSpeech.convert(voiceID, {
-        text: textInput,
-        outputFormat: "mp3_22050_32",
-      });
-      await fs.writeFile(audioFilePath, voicebuffer);
-    } catch (error) {
-      console.error("Error converting text to speech:", error);
-      continue; // Skip this message and proceed with the next one
-    }
-
-    // Generate lipsync data
-    await lipSyncMessage(timestamp);
-
-    message.audio = `/audios/message_${timestamp}.mp3`;
-    message.lipsync = await readJsonTranscript(jsonFilePath);
-
-    // Track the files for cleanup
-    previousFiles.push(audioFilePath);
-    previousFiles.push(jsonFilePath);
+    res.send({ messages: assistantMessages });
+  } catch (error) {
+    console.error("Error communicating with OpenAI:", error);
+    res.status(500).send({ error: "Failed to generate response" });
   }
-
-  isSpeaking = false; // Reset the flag after speaking is done
-
-  res.send({ messages: assistantMessages });
 });
-
-const readJsonTranscript = async (file) => {
-  const data = await fs.readFile(file, "utf8");
-  return JSON.parse(data);
-};
-
-const audioFileToBase64 = async (file) => {
-  const data = await fs.readFile(file);
-  return data.toString("base64");
-};
 
 app.listen(port, () => {
   console.log(`Virtual Chatbot listening on port ${port}`);

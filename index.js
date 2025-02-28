@@ -64,15 +64,17 @@ const lipSyncMessage = async (messageIndex) => {
     );
     console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
 
-    // Delete the temporary WAV file
-    await fs.unlink(`audios/message_${messageIndex}.wav`);
-    console.log(`Deleted temporary WAV file: audios/message_${messageIndex}.wav`);
+    // Verify the JSON file was created
+    const jsonFilePath = path.join(__dirname, "audios", `message_${messageIndex}.json`);
+    const fileExists = await fs.access(jsonFilePath).then(() => true).catch(() => false);
+    if (!fileExists) {
+      throw new Error(`Lipsync JSON file not found: ${jsonFilePath}`);
+    }
   } catch (error) {
     console.error("Error in lip-sync process:", error);
     throw error; // Propagate the error to the caller
   }
 };
-
 const deletePreviousFiles = async () => {
   for (const file of previousFiles) {
     try {

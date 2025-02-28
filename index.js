@@ -46,6 +46,24 @@ const execCommand = (command) => {
   });
 };
 
+const lipSyncMessage = async (messageIndex) => {
+  try {
+    const time = new Date().getTime();
+    console.log(`Starting conversion for message ${messageIndex}`);
+    
+    await execCommand(
+      `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
+    );
+    console.log(`Conversion done in ${new Date().getTime() - time}ms`);
+
+    await execCommand(
+      `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
+    );
+    console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
+  } catch (error) {
+    console.error("Error in lip-sync process:", error);
+  }
+};
 
 const deletePreviousFiles = async () => {
   for (const file of previousFiles) {
@@ -84,26 +102,6 @@ const audioFileToBase64 = async (file) => {
   } catch (error) {
     console.error(`Error converting audio to base64: ${file}`, error);
     return null;
-  }
-};
-
-const lipSyncMessage = async (messageIndex) => {
-  try {
-    const time = new Date().getTime();
-    console.log(`Starting conversion for message ${messageIndex}`);
-    
-    await execCommand(
-      `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
-    );
-    console.log(`Conversion done in ${new Date().getTime() - time}ms`);
-
-    await execCommand(
-      `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
-    );
-    console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
-  } catch (error) {
-    console.error("Error in lip-sync process:", error);
-    throw error; // Rethrow the error to handle it in the calling function
   }
 };
 
@@ -214,6 +212,7 @@ app.post("/chat", async (req, res) => {
           outputFormat: "mp3_22050_32",
         });
         await fs.writeFile(audioFilePath, voicebuffer);
+        console.log(`Audio file saved: ${audioFilePath}`);
       } catch (error) {
         console.error("Error converting text to speech:", error);
         continue;
@@ -221,13 +220,14 @@ app.post("/chat", async (req, res) => {
 
       try {
         await lipSyncMessage(timestamp);
+        console.log(`Lipsync file saved: ${jsonFilePath}`);
       } catch (error) {
         console.error("Error generating lipsync:", error);
         continue;
       }
 
       message.audio = `/audios/message_${timestamp}.mp3`;
-      message.lipsync = await readJsonTranscript(jsonFilePath);
+      message.lipsync = `/audios/message_${timestamp}.json`;
 
       previousFiles.push(audioFilePath, jsonFilePath);
     }
@@ -240,6 +240,7 @@ app.post("/chat", async (req, res) => {
     res.status(500).send({ error: "Failed to generate response" });
   }
 });
+
 app.listen(port, () => {
   console.log(`Virtual Chatbot listening on port ${port}`);
 });

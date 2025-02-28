@@ -25,7 +25,7 @@ const voiceID = "EXAVITQu4vr4xnSDxMaL";
 const app = express();
 app.use(express.json());
 app.use(cors());
-app.use("/audios", express.static(path.join(__dirname, "audios"), { fallthrough: false }));
+app.use("/audios", express.static(path.join(__dirname, "audios")));
 
 const port = 3000;
 

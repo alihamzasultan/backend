@@ -26,7 +26,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 app.use("/audios", express.static(path.join(__dirname, "audios")));
-
 const port = 3000;
 
 let previousFiles = [];
@@ -51,30 +50,21 @@ const lipSyncMessage = async (messageIndex) => {
   try {
     const time = new Date().getTime();
     console.log(`Starting conversion for message ${messageIndex}`);
-
-    // Convert MP3 to WAV
+    
     await execCommand(
       `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
     );
     console.log(`Conversion done in ${new Date().getTime() - time}ms`);
 
-    // Generate lipsync data using Rhubarb
     await execCommand(
       `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
     );
     console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
-
-    // Verify the JSON file was created
-    const jsonFilePath = path.join(__dirname, "audios", `message_${messageIndex}.json`);
-    const fileExists = await fs.access(jsonFilePath).then(() => true).catch(() => false);
-    if (!fileExists) {
-      throw new Error(`Lipsync JSON file not found: ${jsonFilePath}`);
-    }
   } catch (error) {
     console.error("Error in lip-sync process:", error);
-    throw error; // Propagate the error to the caller
   }
 };
+
 const deletePreviousFiles = async () => {
   for (const file of previousFiles) {
     try {

@@ -12,6 +12,7 @@
   "author": "Wawa SENSEI <contact@wawasensei.dev>",
   "dependencies": {
     "cors": "^2.8.5",
+    "cloudinary": "^2.5.1",
     "dotenv": "^16.3.1",
     "elevenlabs": "1.50.2",
     "elevenlabs-node": "^2.0.3",

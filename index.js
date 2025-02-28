@@ -7,6 +7,23 @@ import { promises as fs } from "fs";
 import OpenAI from "openai";
 import path from "path";
 import { fileURLToPath } from "url";
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+app.use(cors({
+  origin: "https://frontend-yslq.vercel.app", // Allow requests from your frontend
+  methods: "GET,POST,PUT,DELETE",
+  allowedHeaders: "Content-Type,Authorization"
+}));
+
+app.use(express.json());
+
+app.listen(3000, () => {
+  console.log("Server running on port 3000");
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

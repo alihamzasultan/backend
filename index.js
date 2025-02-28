@@ -156,13 +156,6 @@ app.post("/chat", async (req, res) => {
           facialExpression: "smile",
           animation: "Talking_0",
         },
-        {
-          text: "I missed you so much... Please don't go for so long!",
-          audio: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/intro_1.wav",
-          lipsync: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/intro_1.json",
-          facialExpression: "smile",
-          animation: "Talking_0",
-        },
       ],
     });
     return;
@@ -175,13 +168,6 @@ app.post("/chat", async (req, res) => {
           text: "Please my dear, don't forget to add your API keys!",
           audio: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/api_0.wav",
           lipsync: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/api_0.json",
-          facialExpression: "smile",
-          animation: "Talking_0",
-        },
-        {
-          text: "You don't want to ruin Amey Muke with a crazy ChatGPT and ElevenLabs bill, right?",
-          audio: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/api_1.wav",
-          lipsync: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/api_1.json",
           facialExpression: "smile",
           animation: "Talking_0",
         },
@@ -267,6 +253,7 @@ app.post("/chat", async (req, res) => {
 
     isSpeaking = false;
 
+    // Send the response with audio and lipsync URLs
     res.send({ messages: assistantMessages });
   } catch (error) {
     console.error("Error communicating with OpenAI:", error);

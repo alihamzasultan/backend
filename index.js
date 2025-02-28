@@ -50,18 +50,34 @@ const lipSyncMessage = async (messageIndex) => {
   try {
     const time = new Date().getTime();
     console.log(`Starting conversion for message ${messageIndex}`);
-    
+
+    // Check if the input file exists
+    const inputFile = `audios/message_${messageIndex}.mp3`;
+    if (!fs.existsSync(inputFile)) {
+      console.error(`Input file not found: ${inputFile}`);
+      return;
+    }
+
+    // Convert .mp3 to .wav
     await execCommand(
-      `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
-    );
+      `ffmpeg -y -i ${inputFile} audios/message_${messageIndex}.wav`
+    ).catch((err) => {
+      console.error("FFmpeg error:", err);
+      throw err;
+    });
     console.log(`Conversion done in ${new Date().getTime() - time}ms`);
 
+    // Generate lip-sync data
     await execCommand(
       `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
-    );
+    ).catch((err) => {
+      console.error("Rhubarb error:", err);
+      throw err;
+    });
     console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
   } catch (error) {
     console.error("Error in lip-sync process:", error);
+    return { mouthCues: [] }; // Fallback for frontend
   }
 };
 

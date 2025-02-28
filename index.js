@@ -120,14 +120,14 @@ app.post("/chat", async (req, res) => {
         {
           text: "Hey dear... How was your day?",
           audio: await audioFileToBase64("audios/intro_0.wav"),
-          lipsync: await readJsonTranscript("audios/api_0.json"), // Use api_0.json
+          lipsync: await readJsonTranscript("audios/intro_0.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
         {
           text: "I missed you so much... Please don't go for so long!",
           audio: await audioFileToBase64("audios/intro_1.wav"),
-          lipsync: await readJsonTranscript("audios/api_0.json"), // Use api_0.json
+          lipsync: await readJsonTranscript("audios/intro_1.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
@@ -142,14 +142,14 @@ app.post("/chat", async (req, res) => {
         {
           text: "Please my dear, don't forget to add your API keys!",
           audio: await audioFileToBase64("audios/api_0.wav"),
-          lipsync: await readJsonTranscript("audios/api_0.json"), // Use api_0.json
+          lipsync: await readJsonTranscript("audios/api_0.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
         {
           text: "You don't want to ruin Amey Muke with a crazy ChatGPT and ElevenLabs bill, right?",
           audio: await audioFileToBase64("audios/api_1.wav"),
-          lipsync: await readJsonTranscript("audios/api_0.json"), // Use api_0.json
+          lipsync: await readJsonTranscript("audios/api_1.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
@@ -204,6 +204,7 @@ app.post("/chat", async (req, res) => {
       }
 
       const audioFilePath = path.join(__dirname, "audios", `message_${timestamp}.mp3`);
+      const jsonFilePath = path.join(__dirname, "audios", `message_${timestamp}.json`);
 
       try {
         const voicebuffer = await voice.textToSpeech.convert(voiceID, {
@@ -211,17 +212,17 @@ app.post("/chat", async (req, res) => {
           outputFormat: "mp3_22050_32",
         });
         await fs.writeFile(audioFilePath, voicebuffer);
-        console.log(`Audio file saved: ${audioFilePath}`);
       } catch (error) {
         console.error("Error converting text to speech:", error);
         continue;
       }
 
-      // Use the same lipsync file (api_0.json) for all responses
-      message.audio = `/audios/message_${timestamp}.mp3`;
-      message.lipsync = `/audios/api_0.json`;
+      await lipSyncMessage(timestamp);
 
-      previousFiles.push(audioFilePath);
+      message.audio = `/audios/message_${timestamp}.mp3`;
+      message.lipsync = await readJsonTranscript(jsonFilePath);
+
+      previousFiles.push(audioFilePath, jsonFilePath);
     }
 
     isSpeaking = false;

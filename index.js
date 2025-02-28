@@ -51,18 +51,25 @@ const lipSyncMessage = async (messageIndex) => {
   try {
     const time = new Date().getTime();
     console.log(`Starting conversion for message ${messageIndex}`);
-    
+
+    // Convert MP3 to WAV
     await execCommand(
       `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
     );
     console.log(`Conversion done in ${new Date().getTime() - time}ms`);
 
+    // Generate lipsync data using Rhubarb
     await execCommand(
       `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
     );
     console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
+
+    // Delete the temporary WAV file
+    await fs.unlink(`audios/message_${messageIndex}.wav`);
+    console.log(`Deleted temporary WAV file: audios/message_${messageIndex}.wav`);
   } catch (error) {
     console.error("Error in lip-sync process:", error);
+    throw error; // Propagate the error to the caller
   }
 };
 

@@ -8,14 +8,6 @@ import OpenAI from "openai";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { v2 as cloudinary } from 'cloudinary';
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config();
@@ -58,49 +50,33 @@ const lipSyncMessage = async (messageIndex) => {
   try {
     const time = new Date().getTime();
     console.log(`Starting conversion for message ${messageIndex}`);
-
-    // Upload the audio file to Cloudinar
-    const audioFilePath = path.join(__dirname, "audios", `message_${messageIndex}.mp3`);
-    const cloudinaryResponse = await cloudinary.uploader.upload(audioFilePath, {
-      resource_type: 'video', // Use 'video' for audio files
-      public_id: `message_${messageIndex}`,
-    });
-
-    console.log(`Audio uploaded to Cloudinary: ${cloudinaryResponse.secure_url}`);
-
-    // Download the audio file from Cloudinary for lip-sync generation
-    const cloudinaryAudioUrl = cloudinaryResponse.secure_url;
-    const wavFilePath = path.join(__dirname, "audios", `message_${messageIndex}.wav`);
-
+    
     await execCommand(
-      `ffmpeg -y -i "${cloudinaryAudioUrl}" ${wavFilePath}`
+      `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
     );
     console.log(`Conversion done in ${new Date().getTime() - time}ms`);
 
     await execCommand(
-      `rhubarb -f json -o audios/message_${messageIndex}.json ${wavFilePath} -r phonetic`
+      `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
     );
     console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
-
-    // Delete the local audio file after uploading to Cloudinary
-    await fs.unlink(audioFilePath);
-    console.log(`Deleted local audio file: ${audioFilePath}`);
   } catch (error) {
     console.error("Error in lip-sync process:", error);
   }
 };
+
 const deletePreviousFiles = async () => {
   for (const file of previousFiles) {
     try {
-      // Delete the file from Cloudinary
-      await cloudinary.uploader.destroy(file.public_id, { resource_type: 'video' });
-      console.log(`Deleted file from Cloudinary: ${file.public_id}`);
+      await fs.unlink(file);
+      console.log(`Deleted file: ${file}`);
     } catch (error) {
-      console.error(`Error deleting file ${file.public_id} from Cloudinary:`, error);
+      console.error(`Error deleting file ${file}:`, error);
     }
   }
   previousFiles = [];
 };
+
 const stopSpeaking = () => {
   if (currentProcess) {
     currentProcess.kill();
@@ -243,16 +219,10 @@ app.post("/chat", async (req, res) => {
 
       await lipSyncMessage(timestamp);
 
-      // Upload the audio file to Cloudinary
-      const cloudinaryResponse = await cloudinary.uploader.upload(audioFilePath, {
-        resource_type: 'video', // Use 'video' for audio files
-        public_id: `message_${timestamp}`,
-      });
-
-      message.audio = cloudinaryResponse.secure_url;
+      message.audio = `/audios/message_${timestamp}.mp3`;
       message.lipsync = await readJsonTranscript(jsonFilePath);
 
-      previousFiles.push({ public_id: `message_${timestamp}` });
+      previousFiles.push(audioFilePath, jsonFilePath);
     }
 
     isSpeaking = false;

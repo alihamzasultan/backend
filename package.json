@@ -24,6 +24,10 @@
   },
   "engines": {
   "node": ">=20.17.0"
+},
+  "scripts": {
+  "start": "node index.js",
+  "setup": "apt-get update && apt-get install -y ffmpeg && npm install"
 }
 
 }

@@ -206,14 +206,16 @@ app.post("/chat", async (req, res) => {
       const audioFilePath = path.join(__dirname, "audios", `message_${timestamp}.mp3`);
       const jsonFilePath = path.join(__dirname, "audios", `message_${timestamp}.json`);
 
-
-        try {
-          await fs.writeFile(audioFilePath, voicebuffer);
-          console.log(`Audio saved successfully: ${audioFilePath}`);
+      try {
+        const voicebuffer = await voice.textToSpeech.convert(voiceID, {
+          text: message.text,
+          outputFormat: "mp3_22050_32",
+        });
+        await fs.writeFile(audioFilePath, voicebuffer);
       } catch (error) {
-          console.error(`Error saving audio: ${error}`);
+        console.error("Error converting text to speech:", error);
+        continue;
       }
-      
 
       await lipSyncMessage(timestamp);
 

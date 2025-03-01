@@ -7,7 +7,6 @@ import { promises as fs } from "fs";
 import OpenAI from "openai";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,16 +22,13 @@ const voice = new ElevenLabsClient({
 
 const voiceID = "EXAVITQu4vr4xnSDxMaL";
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
-const bucketName = "your-bucket-name"; // Replace with your Supabase bucket name
-
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use("/audios", express.static(path.join(__dirname, "audios")));
 const port = 3000;
 
+let previousFiles = [];
 let conversationHistory = [];
 let isSpeaking = false;
 let currentProcess = null;
@@ -50,85 +46,35 @@ const execCommand = (command) => {
   });
 };
 
-const uploadFileToSupabase = async (filePath, fileName) => {
-  try {
-    const fileData = await fs.readFile(filePath);
-
-    const { data, error } = await supabase
-      .storage
-      .from(bucketName)
-      .upload(fileName, fileData, {
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    console.log(`File uploaded successfully: ${fileName}`);
-    return data;
-  } catch (error) {
-    console.error(`Error uploading file to Supabase: ${filePath}`, error);
-    return null;
-  }
-};
-
-const downloadFileFromSupabase = async (fileName, localFilePath) => {
-  try {
-    const { data, error } = await supabase
-      .storage
-      .from(bucketName)
-      .download(fileName);
-
-    if (error) {
-      throw error;
-    }
-
-    await fs.writeFile(localFilePath, await data.arrayBuffer());
-    console.log(`File downloaded successfully: ${fileName}`);
-    return localFilePath;
-  } catch (error) {
-    console.error(`Error downloading file from Supabase: ${fileName}`, error);
-    return null;
-  }
-};
-
-const lipSyncMessage = async (audioFileName, jsonFileName) => {
+const lipSyncMessage = async (messageIndex) => {
   try {
     const time = new Date().getTime();
-    console.log(`Starting lip-sync for ${audioFileName}`);
-
-    // Download the audio file from Supabase
-    const localAudioPath = path.join(__dirname, "temp", audioFileName);
-    await downloadFileFromSupabase(audioFileName, localAudioPath);
-
-    // Convert audio to WAV format
-    const localWavPath = path.join(__dirname, "temp", `${audioFileName}.wav`);
+    console.log(`Starting conversion for message ${messageIndex}`);
+    
     await execCommand(
-      `ffmpeg -y -i ${localAudioPath} ${localWavPath}`
+      `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
     );
     console.log(`Conversion done in ${new Date().getTime() - time}ms`);
 
-    // Generate JSON lip-sync file
-    const localJsonPath = path.join(__dirname, "temp", jsonFileName);
     await execCommand(
-      `rhubarb -f json -o ${localJsonPath} ${localWavPath} -r phonetic`
+      `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
     );
     console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
-
-    // Upload JSON file to Supabase
-    await uploadFileToSupabase(localJsonPath, jsonFileName);
-
-    // Clean up local files
-    await fs.unlink(localAudioPath);
-    await fs.unlink(localWavPath);
-    await fs.unlink(localJsonPath);
-
-    console.log(`Lip-sync completed for ${audioFileName}`);
   } catch (error) {
     console.error("Error in lip-sync process:", error);
   }
+};
+
+const deletePreviousFiles = async () => {
+  for (const file of previousFiles) {
+    try {
+      await fs.unlink(file);
+      console.log(`Deleted file: ${file}`);
+    } catch (error) {
+      console.error(`Error deleting file ${file}:`, error);
+    }
+  }
+  previousFiles = [];
 };
 
 const stopSpeaking = () => {
@@ -139,6 +85,26 @@ const stopSpeaking = () => {
   isSpeaking = false;
 };
 
+const readJsonTranscript = async (file) => {
+  try {
+    const data = await fs.readFile(file, "utf8");
+    return JSON.parse(data);
+  } catch (error) {
+    console.error(`Error reading JSON file: ${file}`, error);
+    return null;
+  }
+};
+
+const audioFileToBase64 = async (file) => {
+  try {
+    const data = await fs.readFile(file);
+    return data.toString("base64");
+  } catch (error) {
+    console.error(`Error converting audio to base64: ${file}`, error);
+    return null;
+  }
+};
+
 app.post("/chat", async (req, res) => {
   const userMessage = req.body.message;
 
@@ -146,13 +112,22 @@ app.post("/chat", async (req, res) => {
     stopSpeaking();
   }
 
+  await deletePreviousFiles();
+
   if (!userMessage) {
     res.send({
       messages: [
         {
           text: "Hey dear... How was your day?",
-          audio: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/intro_0.wav",
-          lipsync: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/intro_0.json",
+          audio: await audioFileToBase64("audios/intro_0.wav"),
+          lipsync: await readJsonTranscript("audios/intro_0.json"),
+          facialExpression: "smile",
+          animation: "Talking_0",
+        },
+        {
+          text: "I missed you so much... Please don't go for so long!",
+          audio: await audioFileToBase64("audios/intro_1.wav"),
+          lipsync: await readJsonTranscript("audios/intro_1.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
@@ -166,8 +141,15 @@ app.post("/chat", async (req, res) => {
       messages: [
         {
           text: "Please my dear, don't forget to add your API keys!",
-          audio: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/api_0.wav",
-          lipsync: "https://your-supabase-url.supabase.co/storage/v1/object/public/your-bucket-name/api_0.json",
+          audio: await audioFileToBase64("audios/api_0.wav"),
+          lipsync: await readJsonTranscript("audios/api_0.json"),
+          facialExpression: "smile",
+          animation: "Talking_0",
+        },
+        {
+          text: "You don't want to ruin Amey Muke with a crazy ChatGPT and ElevenLabs bill, right?",
+          audio: await audioFileToBase64("audios/api_1.wav"),
+          lipsync: await readJsonTranscript("audios/api_1.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
@@ -221,39 +203,28 @@ app.post("/chat", async (req, res) => {
         continue;
       }
 
-      const audioFileName = `message_${timestamp}.mp3`;
-      const jsonFileName = `message_${timestamp}.json`;
+      const audioFilePath = path.join(__dirname, "audios", `message_${timestamp}.mp3`);
+      const jsonFilePath = path.join(__dirname, "audios", `message_${timestamp}.json`);
 
-      // Generate audio using ElevenLabs
-      const localAudioPath = path.join(__dirname, "temp", audioFileName);
-      try {
-        const voicebuffer = await voice.textToSpeech.convert(voiceID, {
-          text: message.text,
-          outputFormat: "mp3_22050_32",
-        });
-        await fs.writeFile(localAudioPath, voicebuffer);
+
+        try {
+          await fs.writeFile(audioFilePath, voicebuffer);
+          console.log(`Audio saved successfully: ${audioFilePath}`);
       } catch (error) {
-        console.error("Error converting text to speech:", error);
-        continue;
+          console.error(`Error saving audio: ${error}`);
       }
+      
 
-      // Upload audio to Supabase
-      await uploadFileToSupabase(localAudioPath, audioFileName);
+      await lipSyncMessage(timestamp);
 
-      // Generate JSON lip-sync file and upload to Supabase
-      await lipSyncMessage(audioFileName, jsonFileName);
+      message.audio = `/audios/message_${timestamp}.mp3`;
+      message.lipsync = await readJsonTranscript(jsonFilePath);
 
-      // Add Supabase URLs to the response
-      message.audio = `https://${supabaseUrl}.supabase.co/storage/v1/object/public/${bucketName}/${audioFileName}`;
-      message.lipsync = `https://${supabaseUrl}.supabase.co/storage/v1/object/public/${bucketName}/${jsonFileName}`;
-
-      // Clean up local audio file
-      await fs.unlink(localAudioPath);
+      previousFiles.push(audioFilePath, jsonFilePath);
     }
 
     isSpeaking = false;
 
-    // Send the response with audio and lipsync URLs
     res.send({ messages: assistantMessages });
   } catch (error) {
     console.error("Error communicating with OpenAI:", error);

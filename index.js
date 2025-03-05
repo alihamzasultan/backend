@@ -46,20 +46,7 @@ const execCommand = (command) => {
   });
 };
 
-const generateLipSyncData = async (text, outputFile) => {
-  try {
-    const time = new Date().getTime();
-    console.log(`Starting lip-sync generation for text: ${text}`);
 
-    // Use rhubarb-lip-sync to generate lip-sync data from text
-    await execCommand(
-      `echo "${text}" | rhubarb -f json -o ${outputFile} -r phonetic`
-    );
-    console.log(`Lip-sync generation done in ${new Date().getTime() - time}ms`);
-  } catch (error) {
-    console.error("Error in lip-sync generation:", error);
-  }
-};
 
 const deletePreviousFiles = async () => {
   for (const file of previousFiles) {
@@ -81,22 +68,30 @@ const stopSpeaking = () => {
   isSpeaking = false;
 };
 
-const readJsonTranscript = async (file) => {
+
+
+const generateLipSyncData = async (text, outputFile) => {
   try {
-    const data = await fs.readFile(file, "utf8");
+    const time = new Date().getTime();
+    console.log(`Starting lip-sync generation for text: ${text}`);
+
+    // Use rhubarb-lip-sync to generate lip-sync data from text
+    await execCommand(
+      `echo "${text}" | rhubarb -f json -o ${outputFile} -r phonetic`
+    );
+    console.log(`Lip-sync generation done in ${new Date().getTime() - time}ms`);
+
+    // Verify the JSON file was created
+    const fileExists = await fs.access(outputFile).then(() => true).catch(() => false);
+    if (!fileExists) {
+      throw new Error(`Lip-sync file not created: ${outputFile}`);
+    }
+
+    // Read and return the lip-sync data
+    const data = await fs.readFile(outputFile, "utf8");
     return JSON.parse(data);
   } catch (error) {
-    console.error(`Error reading JSON file: ${file}`, error);
-    return null;
-  }
-};
-
-const audioFileToBase64 = async (file) => {
-  try {
-    const data = await fs.readFile(file);
-    return data.toString("base64");
-  } catch (error) {
-    console.error(`Error converting audio to base64: ${file}`, error);
+    console.error("Error in lip-sync generation:", error);
     return null;
   }
 };
@@ -202,11 +197,12 @@ app.post("/chat", async (req, res) => {
         });
         await fs.writeFile(audioFilePath, voicebuffer);
 
-        // Generate lip-sync data from GPT's response
-        await generateLipSyncData(message.text, jsonFilePath);
+        // Generate lip-sync data
+        const lipsyncData = await generateLipSyncData(message.text, jsonFilePath);
 
+        // Add audio and lip-sync data to the message
         message.audio = `/audios/message_${timestamp}.mp3`;
-        message.lipsync = await readJsonTranscript(jsonFilePath);
+        message.lipsync = lipsyncData; // Send the JSON data directly
 
         previousFiles.push(audioFilePath, jsonFilePath);
       } catch (error) {
@@ -217,13 +213,13 @@ app.post("/chat", async (req, res) => {
 
     isSpeaking = false;
 
+    // Send the response with lip-sync data
     res.send({ messages: assistantMessages });
   } catch (error) {
     console.error("Error communicating with OpenAI:", error);
     res.status(500).send({ error: "Failed to generate response" });
   }
 });
-
 app.listen(port, () => {
   console.log(`Virtual Chatbot listening on port ${port}`);
 });

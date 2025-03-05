@@ -46,22 +46,18 @@ const execCommand = (command) => {
   });
 };
 
-const lipSyncMessage = async (messageIndex) => {
+const generateLipSyncData = async (text, outputFile) => {
   try {
     const time = new Date().getTime();
-    console.log(`Starting conversion for message ${messageIndex}`);
-    
-    await execCommand(
-      `ffmpeg -y -i audios/message_${messageIndex}.mp3 audios/message_${messageIndex}.wav`
-    );
-    console.log(`Conversion done in ${new Date().getTime() - time}ms`);
+    console.log(`Starting lip-sync generation for text: ${text}`);
 
+    // Use rhubarb-lip-sync to generate lip-sync data from text
     await execCommand(
-      `rhubarb -f json -o audios/message_${messageIndex}.json audios/message_${messageIndex}.wav -r phonetic`
+      `echo "${text}" | rhubarb -f json -o ${outputFile} -r phonetic`
     );
-    console.log(`Lip sync done in ${new Date().getTime() - time}ms`);
+    console.log(`Lip-sync generation done in ${new Date().getTime() - time}ms`);
   } catch (error) {
-    console.error("Error in lip-sync process:", error);
+    console.error("Error in lip-sync generation:", error);
   }
 };
 
@@ -119,15 +115,11 @@ app.post("/chat", async (req, res) => {
       messages: [
         {
           text: "Hey dear... How was your day?",
-          audio: await audioFileToBase64("audios/intro_0.wav"),
-          lipsync: await readJsonTranscript("audios/intro_0.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
         {
           text: "I missed you so much... Please don't go for so long!",
-          audio: await audioFileToBase64("audios/intro_1.wav"),
-          lipsync: await readJsonTranscript("audios/intro_1.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
@@ -141,15 +133,11 @@ app.post("/chat", async (req, res) => {
       messages: [
         {
           text: "Please my dear, don't forget to add your API keys!",
-          audio: await audioFileToBase64("audios/api_0.wav"),
-          lipsync: await readJsonTranscript("audios/api_0.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
         {
           text: "You don't want to ruin Amey Muke with a crazy ChatGPT and ElevenLabs bill, right?",
-          audio: await audioFileToBase64("audios/api_1.wav"),
-          lipsync: await readJsonTranscript("audios/api_1.json"),
           facialExpression: "smile",
           animation: "Talking_0",
         },
@@ -207,22 +195,24 @@ app.post("/chat", async (req, res) => {
       const jsonFilePath = path.join(__dirname, "audios", `message_${timestamp}.json`);
 
       try {
+        // Generate audio using ElevenLabs
         const voicebuffer = await voice.textToSpeech.convert(voiceID, {
           text: message.text,
           outputFormat: "mp3_22050_32",
         });
         await fs.writeFile(audioFilePath, voicebuffer);
+
+        // Generate lip-sync data from GPT's response
+        await generateLipSyncData(message.text, jsonFilePath);
+
+        message.audio = `/audios/message_${timestamp}.mp3`;
+        message.lipsync = await readJsonTranscript(jsonFilePath);
+
+        previousFiles.push(audioFilePath, jsonFilePath);
       } catch (error) {
-        console.error("Error converting text to speech:", error);
+        console.error("Error generating audio or lip-sync data:", error);
         continue;
       }
-
-      await lipSyncMessage(timestamp);
-
-      message.audio = `/audios/message_${timestamp}.mp3`;
-      message.lipsync = await readJsonTranscript(jsonFilePath);
-
-      previousFiles.push(audioFilePath, jsonFilePath);
     }
 
     isSpeaking = false;
